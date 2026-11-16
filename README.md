@@ -76,8 +76,8 @@ Ensure you are running **KDE Plasma 6.0+** on either **Wayland** (recommended) o
 
 ```bash
 # Clone the repository
-git clone https://github.com/tasin/plasmatahoe-engine.git
-cd plasmatahoe-engine
+git clone https://github.com/tasin/plasmatahoe.git
+cd plasmatahoe
 
 # (Optional) Install Python GUI dependency if not already installed by your package manager:
 pip install -r requirements.txt
