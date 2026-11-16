@@ -81,7 +81,7 @@ case "$DISTRO_ID" in
         run_as_root apt-get install -y --no-install-recommends \
             git cmake extra-cmake-modules ninja-build g++ \
             qt6-base-dev qt6-declarative-dev qt6-svg-dev \
-            qt6-style-kvantum sassc gtk2-engines-murrine \
+            kvantum sassc gtk2-engines-murrine \
             kwin-dev libplasma-dev python3-pyqt6 jq gettext
         ;;
 
@@ -90,7 +90,7 @@ case "$DISTRO_ID" in
         run_as_root zypper --non-interactive install \
             git cmake extra-cmake-modules ninja gcc-c++ \
             qt6-base-devel qt6-declarative-devel qt6-svg-devel \
-            kvantum-manager sassc gtk2-engine-murrine \
+            kvantum sassc gtk2-engine-murrine \
             kwin6-devel libplasma6-devel python3-qt6 jq gettext-tools
         ;;
 
@@ -102,7 +102,7 @@ case "$DISTRO_ID" in
         elif [[ "$ID_LIKE_VAL" =~ (debian|ubuntu) ]]; then
             log_info "Debian-like distro detected. Installing via apt-get..."
             run_as_root apt-get update -y
-            run_as_root apt-get install -y --no-install-recommends git cmake extra-cmake-modules ninja-build g++ qt6-base-dev qt6-declarative-dev qt6-svg-dev qt6-style-kvantum sassc gtk2-engines-murrine kwin-dev libplasma-dev python3-pyqt6 jq gettext
+            run_as_root apt-get install -y --no-install-recommends git cmake extra-cmake-modules ninja-build g++ qt6-base-dev qt6-declarative-dev qt6-svg-dev kvantum sassc gtk2-engines-murrine kwin-dev libplasma-dev python3-pyqt6 jq gettext
         elif [[ "$ID_LIKE_VAL" =~ fedora ]]; then
             log_info "Fedora-like distro detected. Installing via dnf..."
             run_as_root dnf install -y git cmake extra-cmake-modules ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg-devel kvantum sassc gtk-murrine-engine kwin-devel libplasma-devel python3-pyqt6 jq gettext

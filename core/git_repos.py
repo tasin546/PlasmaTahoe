@@ -152,6 +152,11 @@ class GitRepoManager:
         defn = self.REPOS[repo_key]
         target_path = self.repos_dir / defn.name
 
+        if self.config.dry_run:
+            if log_cb:
+                log_cb(f"[DRY-RUN] Would fetch {defn.name} ({defn.primary_url}) to {target_path}", "INFO")
+            return target_path
+
         if log_cb:
             log_cb(f"Preparing upstream repository: {defn.name} ({defn.description})", "INFO")
 
@@ -191,6 +196,8 @@ class GitRepoManager:
             if self._run_cmd(fb_cmd, log_cb=log_cb):
                 return target_path
 
+        if target_path.exists():
+            shutil.rmtree(target_path, ignore_errors=True)
         if log_cb:
             log_cb(f"Failed to clone repository: {defn.name}", "ERROR")
         return None
@@ -203,6 +210,11 @@ class GitRepoManager:
         log_cb: Optional[Callable[[str, str], None]] = None,
     ) -> bool:
         """Run MacTahoe-kde install.sh."""
+        if self.config.dry_run:
+            if log_cb:
+                log_cb(f"[DRY-RUN] Would execute MacTahoe-kde install.sh with mode={mode.value}", "INFO")
+            return True
+
         install_script = repo_path / "install.sh"
         if not install_script.exists():
             if log_cb:
@@ -231,6 +243,11 @@ class GitRepoManager:
         log_cb: Optional[Callable[[str, str], None]] = None,
     ) -> bool:
         """Run MacTahoe-gtk-theme install.sh."""
+        if self.config.dry_run:
+            if log_cb:
+                log_cb(f"[DRY-RUN] Would execute MacTahoe-gtk-theme install.sh with profile={profile.value}", "INFO")
+            return True
+
         install_script = repo_path / "install.sh"
         if not install_script.exists():
             if log_cb:
@@ -266,6 +283,11 @@ class GitRepoManager:
         log_cb: Optional[Callable[[str, str], None]] = None,
     ) -> bool:
         """Install MacTahoe icons and cursors."""
+        if self.config.dry_run:
+            if log_cb:
+                log_cb("[DRY-RUN] Would install MacTahoe icons and cursors", "INFO")
+            return True
+
         dest_icons = self.config.icons_dir
         dest_icons.mkdir(parents=True, exist_ok=True)
 
@@ -304,6 +326,11 @@ class GitRepoManager:
         Install Liquid Glass QML plasmoid widgets.
         Copies packages to ~/.local/share/plasma/plasmoids/ and registers them.
         """
+        if self.config.dry_run:
+            if log_cb:
+                log_cb("[DRY-RUN] Would install Liquid Glass QML plasmoids into ~/.local/share/plasma/plasmoids", "INFO")
+            return True
+
         packages_dir = widgets_repo / "packages"
         if not packages_dir.exists():
             if log_cb:
@@ -358,6 +385,11 @@ class GitRepoManager:
         log_cb: Optional[Callable[[str, str], None]] = None,
     ) -> bool:
         """Install a standalone widget repo (e.g. kppleMenu or panel-colorizer)."""
+        if self.config.dry_run:
+            if log_cb:
+                log_cb(f"[DRY-RUN] Would deploy standalone widget: {widget_id}", "INFO")
+            return True
+
         plasmoids_dir = self.config.plasmoids_dir
         plasmoids_dir.mkdir(parents=True, exist_ok=True)
         dest = plasmoids_dir / widget_id
@@ -395,6 +427,11 @@ class GitRepoManager:
         Compile and install a C++ KWin shader effect using CMake.
         Falls back gracefully if dev packages are missing.
         """
+        if self.config.dry_run:
+            if log_cb:
+                log_cb(f"[DRY-RUN] Would compile and install KWin shader effect: {effect_name}", "INFO")
+            return True
+
         if not shutil.which("cmake"):
             if log_cb:
                 log_cb(f"CMake not found, skipping C++ compilation for {effect_name}", "WARN")

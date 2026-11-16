@@ -62,12 +62,16 @@ class PipelineRunner:
                 return False
 
             # Phase 2: Atomic Pre-Flight Snapshot Backup
-            update(10, "Phase 2: Creating atomic snapshot backup of existing configurations...")
-            backup_path = self.backup_manager.create_backup(log_cb=log_cb)
-            if not backup_path:
-                update(12, "Pre-flight backup failed! Halting to protect user data.", "ERROR")
-                return False
-            update(15, f"Snapshot successfully created: {backup_path.name}", "SUCCESS")
+            if self.config.dry_run:
+                update(10, "Phase 2: [DRY-RUN] Simulating atomic snapshot backup of existing configurations...")
+                update(15, "[DRY-RUN] Snapshot simulated (no disk writes).", "SUCCESS")
+            else:
+                update(10, "Phase 2: Creating atomic snapshot backup of existing configurations...")
+                backup_path = self.backup_manager.create_backup(log_cb=log_cb)
+                if not backup_path:
+                    update(12, "Pre-flight backup failed! Halting to protect user data.", "ERROR")
+                    return False
+                update(15, f"Snapshot successfully created: {backup_path.name}", "SUCCESS")
 
             if self.cancelled:
                 return False
@@ -75,6 +79,10 @@ class PipelineRunner:
             # Phase 3: Check / Resolve System Dependencies
             update(20, "Phase 3: Verifying system build and runtime dependencies...")
             missing_cmds = self.distro_resolver.check_missing_commands()
+            has_dev_headers = self.distro_resolver.check_development_headers(self.config.profile)
+            if not has_dev_headers and self.config.profile == PerformanceProfile.FULL_LIQUID_GLASS:
+                update(21, "Notice: KWin C++ development headers not detected. Mode A shader compilation may require distro header packages.", "WARN")
+
             if missing_cmds:
                 update(22, f"Missing build tools: {', '.join(missing_cmds)}. Attempting installation...", "WARN")
                 # Attempt installation if pkexec/sudo available
@@ -82,6 +90,7 @@ class PipelineRunner:
                     profile=self.config.profile,
                     use_pkexec=True,
                     log_cb=log_cb,
+                    dry_run=self.config.dry_run,
                 )
 
             if self.cancelled:
@@ -93,6 +102,17 @@ class PipelineRunner:
             gtk_repo = self.repo_manager.clone_or_update("mactahoe_gtk", log_cb=log_cb)
             icon_repo = self.repo_manager.clone_or_update("mactahoe_icons", log_cb=log_cb)
             cursor_repo = self.repo_manager.clone_or_update("whitesur_cursors", log_cb=log_cb)
+
+            failed_repos = []
+            if self.config.components.install_plasma_theme and not kde_repo:
+                failed_repos.append("MacTahoe-kde")
+            if self.config.components.install_gtk_theme and not gtk_repo:
+                failed_repos.append("MacTahoe-gtk-theme")
+            if self.config.components.install_icons and not icon_repo:
+                failed_repos.append("MacTahoe-icon-theme")
+
+            if failed_repos:
+                update(35, f"Warning: Could not fetch critical repositories: {', '.join(failed_repos)}", "WARN")
 
             if self.cancelled:
                 return False
@@ -186,8 +206,11 @@ class PipelineRunner:
                 self.layout_manager.apply_layout(log_cb=log_cb)
 
             # Phase 10: Reloading desktop services
-            update(95, "Phase 10: Refreshing KWin compositor and PlasmaShell...")
-            self.backup_manager.restart_kde_services(log_cb=log_cb)
+            if self.config.dry_run:
+                update(95, "Phase 10: [DRY-RUN] Desktop service refresh simulated (skipped live service reload).", "INFO")
+            else:
+                update(95, "Phase 10: Refreshing KWin compositor and PlasmaShell...")
+                self.backup_manager.restart_kde_services(log_cb=log_cb)
 
             update(100, "macOS Tahoe 'Liquid Glass' transformation completed successfully!", "SUCCESS")
             return True

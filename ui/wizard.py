@@ -698,6 +698,8 @@ if PYQT6_AVAILABLE:
             self.manifest_lbl.setText(f"Snapshot: {arc_path.name}")
 
         def _create_manual_snapshot(self) -> None:
+            self.manifest_lbl.setText("Creating pre-flight backup snapshot...")
+            QApplication.processEvents()
             arc = self.backup_manager.create_backup()
             if arc:
                 QMessageBox.information(self, "Backup Created", f"New snapshot saved:\n{arc.name}")
@@ -720,11 +722,20 @@ if PYQT6_AVAILABLE:
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.Yes:
-                ok = self.backup_manager.restore_backup(arc_path)
-                if ok:
-                    QMessageBox.information(self, "Rollback Complete", "Configuration restored successfully.")
-                else:
-                    QMessageBox.critical(self, "Rollback Failed", "Could not restore configuration snapshot.")
+                self.btn_rollback.setEnabled(False)
+                self.manifest_lbl.setText("Restoring snapshot and restarting Plasma...")
+                self.restore_thread = RestoreThread(self.backup_manager, arc_path)
+                self.restore_thread.finished_signal.connect(self._on_rollback_finished)
+                self.restore_thread.start()
+
+        def _on_rollback_finished(self, success: bool) -> None:
+            self.btn_rollback.setEnabled(True)
+            if success:
+                self.manifest_lbl.setText("Configuration restored successfully.")
+                QMessageBox.information(self, "Rollback Complete", "Configuration restored successfully!")
+            else:
+                self.manifest_lbl.setText("Rollback encountered an error.")
+                QMessageBox.critical(self, "Rollback Failed", "Could not restore configuration snapshot.")
 
 
     def launch_gui(config: Optional[EngineConfig] = None) -> int:

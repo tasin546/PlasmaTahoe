@@ -44,14 +44,23 @@ class PlasmaLayoutManager:
 
         script_code = self.generate_script()
 
-        # Find D-Bus executable (qdbus6 or qdbus)
-        qdbus_bin = shutil.which("qdbus6") or shutil.which("qdbus")
+        if self.config.dry_run:
+            if log_cb:
+                log_cb("[DRY-RUN] Script generation verified. Skipping live PlasmaShell D-Bus invocation.", "INFO")
+            return True
+
+        # Find D-Bus executable (strictly qdbus6 for Plasma 6)
+        qdbus_bin = shutil.which("qdbus6")
         if not qdbus_bin:
             if log_cb:
-                log_cb("qdbus6/qdbus not available on system. Writing layout script to disk.", "WARN")
+                log_cb("qdbus6 not found on system. Writing layout script to cache for manual execution.", "WARN")
             dest = self.config.cache_dir / "generated_layout.js"
-            with open(dest, "w", encoding="utf-8") as f:
-                f.write(script_code)
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with open(dest, "w", encoding="utf-8") as f:
+                    f.write(script_code)
+            except Exception:
+                pass
             return True
 
         # Execute script via DBus

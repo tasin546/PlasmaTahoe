@@ -53,6 +53,44 @@ class TestBackup(unittest.TestCase):
             restored_content = (config_dir / "kwinrc").read_text()
             self.assertIn("ButtonsOnLeft=XIA", restored_content)
 
+    def test_restore_path_traversal_rejection(self):
+        import tarfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            home_dir = tmp / "home"
+            backup_dir = tmp / "backups"
+            config_dir = home_dir / ".config"
+            config_dir.mkdir(parents=True, exist_ok=True)
+            backup_dir.mkdir(parents=True, exist_ok=True)
+
+            mgr = BackupManager(backup_dir=backup_dir, home_dir=home_dir)
+
+            # Create a malicious tarball with path traversal entry
+            archive_path = backup_dir / "backup_malicious.tar.gz"
+            with tarfile.open(archive_path, "w:gz") as tar:
+                # Normal entry
+                normal_file = tmp / "normal.txt"
+                normal_file.write_text("safe content")
+                tar.add(normal_file, arcname="config/normal.txt")
+
+                # Traversal entry
+                from io import BytesIO
+                traversal_data = b"malicious content"
+                tarinfo = tarfile.TarInfo(name="config/../../escape.txt")
+                tarinfo.size = len(traversal_data)
+                tar.addfile(tarinfo, BytesIO(traversal_data))
+
+            # Attempt restore
+            warnings = []
+            success = mgr.restore_backup(archive_path, log_cb=lambda msg, lvl: warnings.append(msg))
+            self.assertTrue(success)
+
+            # Normal file must be restored
+            self.assertTrue((config_dir / "normal.txt").exists())
+            # Escaped file MUST NOT exist outside config dir
+            self.assertFalse((tmp / "escape.txt").exists())
+            self.assertFalse((home_dir / "escape.txt").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

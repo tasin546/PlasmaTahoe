@@ -80,7 +80,7 @@ class DistroResolver:
             "core": [
                 "git", "cmake", "extra-cmake-modules", "ninja-build", "g++",
                 "qt6-base-dev", "qt6-declarative-dev", "qt6-svg-dev",
-                "qt6-style-kvantum", "sassc", "gtk2-engines-murrine", "jq", "gettext"
+                "kvantum", "sassc", "gtk2-engines-murrine", "jq", "gettext"
             ],
             "plasma6_dev": [
                 "kwin-dev", "libplasma-dev"
@@ -93,7 +93,7 @@ class DistroResolver:
             "core": [
                 "git", "cmake", "extra-cmake-modules", "ninja", "gcc-c++",
                 "qt6-base-devel", "qt6-declarative-devel", "qt6-svg-devel",
-                "kvantum-manager", "sassc", "gtk2-engine-murrine", "jq", "gettext-tools"
+                "kvantum", "sassc", "gtk2-engine-murrine", "jq", "gettext-tools"
             ],
             "plasma6_dev": [
                 "kwin6-devel", "libplasma6-devel"
@@ -189,6 +189,23 @@ class DistroResolver:
 
         raise RuntimeError(f"Unsupported package manager: {pm}")
 
+    def check_development_headers(self, profile: PerformanceProfile) -> bool:
+        """
+        Check if KWin and Qt6 C++ development headers/cmake configs are installed.
+        Only required when compiling C++ shaders in FULL_LIQUID_GLASS profile.
+        """
+        if profile != PerformanceProfile.FULL_LIQUID_GLASS:
+            return True
+
+        kwin_cmake_paths = [
+            "/usr/lib/cmake/KWin",
+            "/usr/lib64/cmake/KWin",
+            "/usr/lib/x86_64-linux-gnu/cmake/KWin",
+            "/usr/include/kwin",
+            "/usr/include/KWin",
+        ]
+        return any(Path(p).exists() for p in kwin_cmake_paths)
+
     def check_missing_commands(self) -> List[str]:
         """Check essential CLI tools present on PATH."""
         required = ["git", "cmake", "sassc"]
@@ -199,6 +216,7 @@ class DistroResolver:
         profile: PerformanceProfile,
         use_pkexec: bool = True,
         log_cb: Optional[Callable[[str, str], None]] = None,
+        dry_run: bool = False,
     ) -> bool:
         """
         Execute package manager installation.
@@ -211,6 +229,11 @@ class DistroResolver:
             return False
 
         cmd = self.get_install_command(packages, use_pkexec=use_pkexec)
+        if dry_run:
+            if log_cb:
+                log_cb(f"[DRY-RUN] Would execute package installation: {' '.join(cmd)}", "INFO")
+            return True
+
         if log_cb:
             log_cb(f"Executing: {' '.join(cmd)}", "INFO")
 

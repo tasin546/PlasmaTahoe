@@ -55,8 +55,13 @@ class BackupManager:
 
     def __init__(self, backup_dir: Optional[Path] = None, home_dir: Optional[Path] = None) -> None:
         self.home_dir = home_dir or Path.home()
-        self.config_dir = self.home_dir / ".config"
-        self.backup_dir = backup_dir or (self.home_dir / ".local" / "share" / "plasmatahoe" / "backups")
+        xdg_config = os.environ.get("XDG_CONFIG_HOME")
+        self.config_dir = Path(xdg_config).resolve() if xdg_config else (self.home_dir / ".config")
+        xdg_data = os.environ.get("XDG_DATA_HOME")
+        default_backup_dir = (
+            Path(xdg_data).resolve() if xdg_data else (self.home_dir / ".local" / "share")
+        ) / "plasmatahoe" / "backups"
+        self.backup_dir = backup_dir or default_backup_dir
         self.backup_dir.mkdir(parents=True, exist_ok=True)
 
     def _calculate_sha256(self, file_path: Path) -> str:
@@ -87,9 +92,13 @@ class BackupManager:
         if log_cb:
             log_cb(f"Initiating pre-flight atomic backup: {archive_name}", "INFO")
 
+        existing_backups = list(self.backup_dir.glob("backup_*.tar.gz"))
+        is_baseline = len(existing_backups) == 0
+
         manifest: Dict[str, any] = {
             "timestamp": now.isoformat(),
             "formatted_date": now.strftime("%b %d, %Y %I:%M:%S %p"),
+            "is_baseline": is_baseline,
             "files": {},
             "installed_plasmoids": self._get_installed_plasmoids(),
             "os_release": {},
@@ -202,6 +211,7 @@ class BackupManager:
         self,
         archive_path: Path,
         log_cb: Optional[Callable[[str, str], None]] = None,
+        dry_run: bool = False,
     ) -> bool:
         """
         Restore configuration files from archive and restart Plasma shell & KWin.
@@ -214,21 +224,45 @@ class BackupManager:
         if log_cb:
             log_cb(f"Restoring configuration from snapshot: {archive_path.name}", "INFO")
 
+        if dry_run:
+            if log_cb:
+                log_cb(f"[DRY-RUN] Would extract {archive_path} to {self.config_dir}", "INFO")
+                log_cb("[DRY-RUN] Would reload KWin and restart plasmashell via qdbus6", "INFO")
+            return True
+
         try:
             with tarfile.open(archive_path, "r:gz") as tar:
+                resolved_config = self.config_dir.resolve()
                 for member in tar.getmembers():
                     if member.name.startswith("config/"):
-                        rel_path = member.name[len("config/") :]
-                        dest = self.config_dir / rel_path
+                        rel_path = member.name[len("config/") :].strip("/")
+                        if not rel_path:
+                            continue
+
+                        dest = (self.config_dir / rel_path).resolve()
+                        # Path traversal protection
+                        try:
+                            dest.relative_to(resolved_config)
+                        except ValueError:
+                            if log_cb:
+                                log_cb(f"Security: skipped archive entry outside config dir: {member.name}", "WARN")
+                            continue
 
                         if member.isdir():
                             dest.mkdir(parents=True, exist_ok=True)
+                            os.chmod(dest, member.mode)
+                        elif member.issym():
+                            dest.parent.mkdir(parents=True, exist_ok=True)
+                            if dest.is_symlink() or dest.exists():
+                                dest.unlink()
+                            os.symlink(member.linkname, dest)
                         else:
                             dest.parent.mkdir(parents=True, exist_ok=True)
                             source = tar.extractfile(member)
                             if source:
                                 with open(dest, "wb") as f:
                                     f.write(source.read())
+                                os.chmod(dest, member.mode)
 
             if log_cb:
                 log_cb("Configuration files restored. Reloading KDE Plasma...", "INFO")
@@ -246,7 +280,7 @@ class BackupManager:
 
     def restart_kde_services(self, log_cb: Optional[Callable[[str, str], None]] = None) -> None:
         """Gracefully reload PlasmaShell and reconfigure KWin."""
-        # 1. Reconfigure KWin
+        # 1. Reconfigure KWin (strictly Plasma 6 qdbus6)
         if shutil.which("qdbus6"):
             try:
                 subprocess.run(
@@ -256,17 +290,8 @@ class BackupManager:
                 )
             except Exception:
                 pass
-        elif shutil.which("qdbus"):
-            try:
-                subprocess.run(
-                    ["qdbus", "org.kde.KWin", "/KWin", "reconfigure"],
-                    capture_output=True,
-                    timeout=5,
-                )
-            except Exception:
-                pass
 
-        # 2. Restart Plasmashell
+        # 2. Restart Plasmashell gracefully
         reloaded = False
         if shutil.which("kquitapp6"):
             try:
@@ -274,13 +299,12 @@ class BackupManager:
                 time.sleep(1)
             except Exception:
                 pass
-
-        # Check if still running, terminate if needed
-        try:
-            subprocess.run(["killall", "-9", "plasmashell"], capture_output=True, timeout=2)
-            time.sleep(0.5)
-        except Exception:
-            pass
+        else:
+            try:
+                subprocess.run(["killall", "-15", "plasmashell"], capture_output=True, timeout=3)
+                time.sleep(1)
+            except Exception:
+                pass
 
         # Relaunch plasmashell in background
         try:
@@ -288,7 +312,12 @@ class BackupManager:
                 subprocess.Popen(["kstart6", "plasmashell"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 reloaded = True
             elif shutil.which("plasmashell"):
-                subprocess.Popen(["nohup", "plasmashell"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen(
+                    ["plasmashell"],
+                    start_new_session=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
                 reloaded = True
         except Exception as e:
             if log_cb:

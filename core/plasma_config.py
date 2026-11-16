@@ -8,14 +8,88 @@ lookandfeeltool, plasma-apply-colorscheme, plasma-apply-cursortheme, qdbus6).
 
 from __future__ import annotations
 
-import configparser
 import os
+import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 from core.config import EngineConfig, PerformanceProfile, ThemeMode
+
+
+def _write_ini_key_inplace(file_path: Path, group: str, key: str, value: str) -> bool:
+    """
+    Safely modify or insert a key-value pair under a specific [group] in a KDE INI file.
+    Preserves all comments, formatting, [$Version] tags, and other sections.
+    Uses atomic replacement via a temporary file.
+    """
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    target_section = f"[{group.strip()}]"
+
+    lines: List[str] = []
+    if file_path.exists():
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+        except Exception:
+            lines = []
+
+    new_lines: List[str] = []
+    in_section = False
+    section_found = False
+    key_updated = False
+    key_pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if in_section:
+                # Exiting the target section without having found the key
+                if not key_updated:
+                    new_lines.append(f"{key}={value}\n")
+                    key_updated = True
+                in_section = False
+
+            if stripped == target_section:
+                in_section = True
+                section_found = True
+                new_lines.append(line)
+                continue
+
+        if in_section and not key_updated:
+            if key_pattern.match(stripped):
+                new_lines.append(f"{key}={value}\n")
+                key_updated = True
+                continue
+
+        new_lines.append(line)
+
+    if in_section and not key_updated:
+        new_lines.append(f"{key}={value}\n")
+        key_updated = True
+
+    if not section_found:
+        if new_lines and not new_lines[-1].endswith("\n"):
+            new_lines.append("\n")
+        if new_lines and new_lines[-1].strip():
+            new_lines.append("\n")
+        new_lines.append(f"{target_section}\n")
+        new_lines.append(f"{key}={value}\n")
+
+    # Atomic write to temporary file then replace
+    try:
+        temp_dir = file_path.parent
+        with tempfile.NamedTemporaryFile("w", dir=temp_dir, delete=False, encoding="utf-8") as tf:
+            tf.writelines(new_lines)
+            temp_path = Path(tf.name)
+        temp_path.replace(file_path)
+        return True
+    except Exception:
+        if "temp_path" in locals() and temp_path.exists():
+            temp_path.unlink()
+        return False
 
 
 class PlasmaConfigurator:
@@ -25,8 +99,7 @@ class PlasmaConfigurator:
         self.config = config
         self.home_dir = config.home_dir
         self.config_dir = config.config_dir
-        self.has_kwriteconfig = bool(shutil.which("kwriteconfig6") or shutil.which("kwriteconfig5"))
-        self.kwriteconfig_bin = "kwriteconfig6" if shutil.which("kwriteconfig6") else "kwriteconfig5"
+        self.kwriteconfig_bin = "kwriteconfig6" if shutil.which("kwriteconfig6") else None
 
     def write_config(
         self,
@@ -40,41 +113,27 @@ class PlasmaConfigurator:
         Write a key/value pair into a KDE configuration file using kwriteconfig6
         or standard fallback INI parser.
         """
-        if self.has_kwriteconfig:
+        if self.config.dry_run:
+            if log_cb:
+                log_cb(f"[DRY-RUN] write_config {filename} [{group}] {key}={value}", "INFO")
+            return True
+
+        if self.kwriteconfig_bin:
             cmd = [self.kwriteconfig_bin, "--file", filename, "--group", group, "--key", key, str(value)]
             try:
                 res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-                return res.returncode == 0
+                if res.returncode == 0:
+                    return True
             except Exception as e:
                 if log_cb:
-                    log_cb(f"kwriteconfig call failed ({e}), falling back to direct write", "WARN")
+                    log_cb(f"kwriteconfig6 failed ({e}), falling back to direct write", "WARN")
 
-        # Direct file fallback
+        # Direct file fallback preserving comments and formatting
         target_path = self.config_dir / filename
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-
-        parser = configparser.ConfigParser(interpolation=None)
-        # Preserve case sensitivity
-        parser.optionxform = str
-
-        if target_path.exists():
-            try:
-                parser.read(target_path, encoding="utf-8")
-            except Exception:
-                pass
-
-        if not parser.has_section(group):
-            parser.add_section(group)
-        parser.set(group, key, str(value))
-
-        try:
-            with open(target_path, "w", encoding="utf-8") as f:
-                parser.write(f, space_around_delimiters=False)
-            return True
-        except Exception as e:
-            if log_cb:
-                log_cb(f"Failed to write config {filename}: {e}", "ERROR")
-            return False
+        success = _write_ini_key_inplace(target_path, group, key, str(value))
+        if not success and log_cb:
+            log_cb(f"Failed to write config {filename} [{group}] {key}={value}", "ERROR")
+        return success
 
     def apply_window_decorations(
         self,
@@ -116,6 +175,11 @@ class PlasmaConfigurator:
         # Set widgetStyle in kdeglobals
         self.write_config("kdeglobals", "KDE", "widgetStyle", "kvantum", log_cb)
 
+        if self.config.dry_run:
+            if log_cb:
+                log_cb("[DRY-RUN] Would configure kvantum.kvconfig theme", "INFO")
+            return True
+
         # Write ~/.config/Kvantum/kvantum.kvconfig
         kvantum_dir = self.config_dir / "Kvantum"
         kvantum_dir.mkdir(parents=True, exist_ok=True)
@@ -151,14 +215,20 @@ class PlasmaConfigurator:
         if log_cb:
             log_cb(f"Applying color scheme: {color_scheme} and icon theme: {icon_theme}...", "INFO")
 
-        # 1. Colorscheme
-        if shutil.which("plasma-apply-colorscheme"):
-            subprocess.run(["plasma-apply-colorscheme", color_scheme], capture_output=True)
-        self.write_config("kdeglobals", "General", "ColorScheme", color_scheme, log_cb)
+        if self.config.dry_run:
+            if log_cb:
+                log_cb(f"[DRY-RUN] Would run plasma-apply-colorscheme {color_scheme}", "INFO")
+                log_cb(f"[DRY-RUN] Would run plasma-apply-cursortheme {cursor_theme}", "INFO")
+        else:
+            # 1. Colorscheme
+            if shutil.which("plasma-apply-colorscheme"):
+                subprocess.run(["plasma-apply-colorscheme", color_scheme], capture_output=True)
 
-        # 2. Cursors
-        if shutil.which("plasma-apply-cursortheme"):
-            subprocess.run(["plasma-apply-cursortheme", cursor_theme], capture_output=True)
+            # 2. Cursors
+            if shutil.which("plasma-apply-cursortheme"):
+                subprocess.run(["plasma-apply-cursortheme", cursor_theme], capture_output=True)
+
+        self.write_config("kdeglobals", "General", "ColorScheme", color_scheme, log_cb)
         self.write_config("kcminputrc", "Mouse", "cursorTheme", cursor_theme, log_cb)
 
         # 3. Icons
@@ -166,7 +236,7 @@ class PlasmaConfigurator:
 
         # 4. Try lookandfeeltool if packaged
         look_name = f"com.github.vinceliuice.{color_scheme}"
-        if shutil.which("lookandfeeltool"):
+        if not self.config.dry_run and shutil.which("lookandfeeltool"):
             try:
                 subprocess.run(["lookandfeeltool", "-a", look_name], capture_output=True, timeout=5)
             except Exception:
@@ -249,6 +319,11 @@ class PlasmaConfigurator:
 
         if log_cb:
             log_cb("Applying Flatpak theme overrides for sandboxed application consistency...", "INFO")
+
+        if self.config.dry_run:
+            if log_cb:
+                log_cb("[DRY-RUN] Would apply Flatpak user filesystem overrides", "INFO")
+            return True
 
         overrides = [
             ["flatpak", "override", "--user", "--filesystem=xdg-config/Kvantum:ro"],

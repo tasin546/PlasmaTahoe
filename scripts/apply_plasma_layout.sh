@@ -35,16 +35,14 @@ sed -e "s/__TOP_PANEL_HEIGHT__/$TOP_HEIGHT/g" \
     -e "s/__DOCK_HEIGHT__/$DOCK_HEIGHT/g" \
     "$JS_TEMPLATE" > "$TEMP_JS"
 
-# Locate QDBus CLI
+# Locate QDBus CLI (Plasma 6 strictly uses qdbus6)
 QDBUS_BIN=""
 if command -v qdbus6 &>/dev/null; then
     QDBUS_BIN="qdbus6"
-elif command -v qdbus &>/dev/null; then
-    QDBUS_BIN="qdbus"
 fi
 
 if [[ -z "$QDBUS_BIN" ]]; then
-    log_error "qdbus6 / qdbus not found. Ensure KDE Plasma 6 desktop is active."
+    log_error "qdbus6 not found. Ensure KDE Plasma 6 desktop is active."
     exit 1
 fi
 

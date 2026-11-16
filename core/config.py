@@ -7,10 +7,26 @@ Defines configuration schemas, hardware profiles, theme modes, and path settings
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict
+
+
+def _get_xdg_config_home() -> Path:
+    env = os.environ.get("XDG_CONFIG_HOME")
+    return Path(env).resolve() if env else Path.home() / ".config"
+
+
+def _get_xdg_data_home() -> Path:
+    env = os.environ.get("XDG_DATA_HOME")
+    return Path(env).resolve() if env else Path.home() / ".local" / "share"
+
+
+def _get_xdg_cache_home() -> Path:
+    env = os.environ.get("XDG_CACHE_HOME")
+    return Path(env).resolve() if env else Path.home() / ".cache"
 
 
 class ThemeMode(str, Enum):
@@ -69,18 +85,18 @@ class EngineConfig:
 
     # Standard XDG paths
     home_dir: Path = field(default_factory=Path.home)
-    cache_dir: Path = field(default_factory=lambda: Path.home() / ".cache" / "plasmatahoe")
-    backup_dir: Path = field(default_factory=lambda: Path.home() / ".local" / "share" / "plasmatahoe" / "backups")
-    config_dir: Path = field(default_factory=lambda: Path.home() / ".config")
-    local_share_dir: Path = field(default_factory=lambda: Path.home() / ".local" / "share")
-    icons_dir: Path = field(default_factory=lambda: Path.home() / ".local" / "share" / "icons")
+    config_dir: Path = field(default_factory=_get_xdg_config_home)
+    local_share_dir: Path = field(default_factory=_get_xdg_data_home)
+    cache_dir: Path = field(default_factory=lambda: _get_xdg_cache_home() / "plasmatahoe")
+    backup_dir: Path = field(default_factory=lambda: _get_xdg_data_home() / "plasmatahoe" / "backups")
+    icons_dir: Path = field(default_factory=lambda: _get_xdg_data_home() / "icons")
     themes_dir: Path = field(default_factory=lambda: Path.home() / ".themes")
-    aurorae_dir: Path = field(default_factory=lambda: Path.home() / ".local" / "share" / "aurorae" / "themes")
-    plasma_themes_dir: Path = field(default_factory=lambda: Path.home() / ".local" / "share" / "plasma" / "desktoptheme")
-    plasmoids_dir: Path = field(default_factory=lambda: Path.home() / ".local" / "share" / "plasma" / "plasmoids")
-    wallpapers_dir: Path = field(default_factory=lambda: Path.home() / ".local" / "share" / "wallpapers")
-    color_schemes_dir: Path = field(default_factory=lambda: Path.home() / ".local" / "share" / "color-schemes")
-    kvantum_config_dir: Path = field(default_factory=lambda: Path.home() / ".config" / "Kvantum")
+    aurorae_dir: Path = field(default_factory=lambda: _get_xdg_data_home() / "aurorae" / "themes")
+    plasma_themes_dir: Path = field(default_factory=lambda: _get_xdg_data_home() / "plasma" / "desktoptheme")
+    plasmoids_dir: Path = field(default_factory=lambda: _get_xdg_data_home() / "plasma" / "plasmoids")
+    wallpapers_dir: Path = field(default_factory=lambda: _get_xdg_data_home() / "wallpapers")
+    color_schemes_dir: Path = field(default_factory=lambda: _get_xdg_data_home() / "color-schemes")
+    kvantum_config_dir: Path = field(default_factory=lambda: _get_xdg_config_home() / "Kvantum")
 
     # Execution flags
     dry_run: bool = False
