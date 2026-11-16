@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plasmatahoe-engine"
+version = "1.0.0"
+description = "A production-grade, open-source desktop customizer transforming KDE Plasma 6.2+ into macOS Tahoe Liquid Glass."
+readme = "README.md"
+authors = [
+    { name = "PlasmaTahoe Contributors" }
+]
+license = { text = "GPL-3.0-or-later" }
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: X11 Applications :: KDE",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Desktop Environment :: K Desktop Environment (KDE)",
+]
+keywords = ["kde", "plasma6", "macos", "tahoe", "customization", "kvantum", "kwin"]
+requires-python = ">=3.10"
+dependencies = [
+    "PyQt6>=6.6.0",
+]
+
+[project.scripts]
+plasmatahoe = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/tasin/plasmatahoe-engine"
+Repository = "https://github.com/tasin/plasmatahoe-engine"
+Issues = "https://github.com/tasin/plasmatahoe-engine/issues"

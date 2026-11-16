@@ -1,0 +1,2 @@
+# PlasmaTahoe-Engine Dependencies
+PyQt6>=6.6.0

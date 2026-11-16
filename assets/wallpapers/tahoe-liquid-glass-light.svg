@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bgLight" cx="50%" cy="30%" r="90%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="60%" stop-color="#E5ECF6"/>
+      <stop offset="100%" stop-color="#C8D7EE"/>
+    </radialGradient>
+    <linearGradient id="lightWave1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#007AFF" stop-opacity="0.6"/>
+      <stop offset="50%" stop-color="#5856D6" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#AF52DE" stop-opacity="0.2"/>
+    </linearGradient>
+    <linearGradient id="lightWave2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#32ADE6" stop-opacity="0.55"/>
+      <stop offset="50%" stop-color="#64D2FF" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.0"/>
+    </linearGradient>
+    <filter id="lightBlur">
+      <feGaussianBlur stdDeviation="110"/>
+    </filter>
+  </defs>
+  <rect width="3840" height="2160" fill="url(#bgLight)"/>
+  <g filter="url(#lightBlur)">
+    <path d="M-200,1000 Q1000,300 2000,800 T4100,600 L4100,2400 L-200,2400 Z" fill="url(#lightWave1)"/>
+    <path d="M-100,500 Q1400,1300 2600,500 T4200,1000 L4200,2400 L-100,2400 Z" fill="url(#lightWave2)"/>
+    <ellipse cx="2600" cy="700" rx="900" ry="500" fill="#AF52DE" fill-opacity="0.2"/>
+    <ellipse cx="800" cy="1300" rx="1000" ry="600" fill="#32ADE6" fill-opacity="0.25"/>
+  </g>
+</svg>
